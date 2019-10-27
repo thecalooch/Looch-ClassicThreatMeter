@@ -101,7 +101,8 @@ local function CreateBackdrop(parent, cfg)
 		},
 	}
 	f:SetBackdrop(backdrop)
-	f:SetBackdropColor(unpack(cfg.bgColor))
+	--f:SetBackdropColor(unpack(cfg.bgColor))
+	f:SetBackdropColor({0,0,0,0})
 	f:SetBackdropBorderColor(unpack(cfg.edgeColor))
 
 	parent.backdrop = f
@@ -116,6 +117,12 @@ end
 local function CreateStatusBar(parent, header)
 	-- StatusBar
 	local bar = CreateFrame("StatusBar", nil, parent)
+
+	if C.frame.verticalOrientation then
+		bar:SetOrientation("VERTICAL")
+		bar:SetFillStyle("REVERSE")
+	end
+
 	bar:SetMinMaxValues(0, 100)
 	-- Backdrop
 	CreateBackdrop(bar, C.backdrop)
@@ -192,9 +199,11 @@ end
 
 local function GetColor(unit)
 	if unit then
-		local colorUnit = {}
-		if C.bar.marker and unit == "player" then
-			return CTM.colorMarker
+		colorUnit = {}
+		if C.bar.playerMarker and (_G.GetUnitName(unit, false) == CTM.playerName or unit == "player") then
+			colorUnit = CTM.colorMarker
+		elseif C.bar.monocolor then
+			colorUnit = C.bar.defaultColor
 		elseif UnitIsPlayer(unit) then
 			colorUnit = RAID_CLASS_COLORS[select(2, UnitClass(unit))]
 		else
@@ -222,7 +231,13 @@ function CTM:UpdateThreatBars()
 			bar.val:SetText(NumFormat(data.threatValue))
 			bar.perc:SetText(floor(data.scaledPercent).."%")
 			bar:SetValue(data.scaledPercent)
+			--TODO player color vs everyone else
 			local color = GetColor(data.unit)
+
+			if color == nil then
+				print(format("CTM: Failed to find color for %s", data.unit)) 
+			end
+
 			bar:SetStatusBarColor(unpack(color))
 			bar.bg:SetVertexColor(color[1] * C.bar.colorMod, color[2] * C.bar.colorMod, color[3] * C.bar.colorMod, C.bar.alpha)
 			bar.backdrop:SetBackdropColor(unpack(C.backdrop.bgColor))
@@ -325,6 +340,11 @@ local function UpdateSize(f)
 	C.frame.height = f:GetHeight()
 
 	local maxBarCount = floor(C.frame.height / (C.bar.height + C.bar.padding)) + 1
+
+	if C.frame.verticalOrientation then
+		maxBarCount = floor(C.frame.width / (C.bar.height + C.bar.padding)) + 1
+	end
+
 	-- if C.bar.count > maxBarCount then C.bar.count = maxBarCount end
 	C.bar.count = maxBarCount
 
@@ -341,8 +361,8 @@ end
 
 local function OnMouseDown(f)
 	f = f:GetParent()
-	f:SetMinResize(64, 64)
-	f:SetMaxResize(512, 1024)
+	f:SetMinResize(32, 32)
+	f:SetMaxResize(1024, 1024)
 	CTM.sizing = true
 	f:SetScript("OnSizeChanged", UpdateSize)
 	f:StartSizing()
@@ -425,6 +445,8 @@ function CTM:UpdateFrame()
 end
 
 function CTM:UpdateBars()
+	local vert = C.frame.verticalOrientation 
+
 	for i = 1, 40 do
 		if not self.bars[i] then
 			self.bars[i] = CreateStatusBar(self.frame)
@@ -432,24 +454,58 @@ function CTM:UpdateBars()
 
 		local bar = self.bars[i]
 
-		if i == 1 then
-			bar:SetPoint("TOP", 0, 0)
+		if vert then
+			if i == 1 then
+				bar:SetPoint("TOPRIGHT", 0, 0)
+			else
+				bar:SetPoint("TOPRIGHT", self.bars[i - 1], "TOPLEFT", -C.bar.padding + 1, 0)
+			end
 		else
-			bar:SetPoint("TOP", self.bars[i - 1], "BOTTOM", 0, -C.bar.padding + 1)
+			if i == 1 then
+				bar:SetPoint("TOP", 0, 0)
+			else
+				bar:SetPoint("TOP", self.bars[i - 1], "BOTTOM", 0, -C.bar.padding + 1)
+			end
 		end
-		bar:SetSize(C.frame.width + 2, C.bar.height)
-		bar:SetStatusBarTexture(C.bar.texture)
+
+		if vert then
+			bar:SetSize(C.bar.height, C.frame.height)
+			local tex = C.bar.texture
+			--tex:Rotate(math.rad(90))
+
+			--local angle = math.rad(90)
+			--local cos, sin = math.cos(angle), math.sin(angle)
+			--texture:SetTexCoord((sin - cos), -(cos + sin), -cos, -sin, sin, -cos, 0, 0)
+			bar:SetStatusBarTexture(tex)
+		else
+			bar:SetSize(C.frame.width + 2, C.bar.height)
+			bar:SetStatusBarTexture(C.bar.texture)
+		end
 
 		-- BG
-		bar.bg:SetTexture(C.bar.texture)
+		--bar.bg:SetTexture(C.bar.texture)
 		-- Name
-		bar.name:SetPoint("LEFT", bar, 4, 0)
+		if C.bar.hideName then
+			bar.name:Hide()
+		end
+		if vert then
+			bar.name:SetPoint("TOP", bar, 4, 0)
+		else
+			bar.name:SetPoint("LEFT", bar, 4, 0)
+		end
 		UpdateFont(bar.name)
+
 		-- Perc
+		if C.bar.hidePercent then
+			bar.perc:Hide()
+		end
 		bar.perc:SetPoint("RIGHT", bar, -2, 0)
 		UpdateFont(bar.perc)
+
 		-- Value
-		-- bar.val:SetPoint("RIGHT", bar, -40, 0)
+		if C.bar.hideValue then
+			bar.val:Hide()
+		end
 		bar.val:SetPoint("RIGHT", bar, -(C.font.size * 3.5), 0)
 		UpdateFont(bar.val)
 
@@ -577,28 +633,6 @@ local function NotifyOldClients()
 	end
 end
 
---[[
-local function CheckVersionOLD(self, event, prefix, msg, channel, sender)
-	if event == "CHAT_MSG_ADDON" then
-		if prefix ~= "CTMVer" or sender == playerName then return end
-		if tonumber(msg) ~= nil and tonumber(msg) > tonumber(CTM.version) then
-			print("|cffff0000"..L.outdated.."|r")
-			self.frame:UnregisterEvent("CHAT_MSG_ADDON")
-		end
-	else
-		if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
-			C_ChatInfo.SendAddonMessage("CTMVer", tonumber(CTM.version), "INSTANCE_CHAT")
-		elseif IsInRaid(LE_PARTY_CATEGORY_HOME) then
-			C_ChatInfo.SendAddonMessage("CTMVer", tonumber(CTM.version), "RAID")
-		elseif IsInGroup(LE_PARTY_CATEGORY_HOME) then
-			C_ChatInfo.SendAddonMessage("CTMVer", tonumber(CTM.version), "PARTY")
-		elseif IsInGuild() then
-			C_ChatInfo.SendAddonMessage("CTMVer", tonumber(CTM.version), "GUILD")
-		end
-	end
-end
---]]
-
 -----------------------------
 -- EVENTS
 -----------------------------
@@ -611,10 +645,8 @@ end)
 
 function CTM:PLAYER_ENTERING_WORLD(...)
 	self.playerName = UnitName("player")
-
 	self.numGroupMembers = IsInRaid() and GetNumGroupMembers() or GetNumSubgroupMembers()
 
-	-- CheckVersionOLD(self, ...)
 	CheckStatus()
 end
 
@@ -628,7 +660,6 @@ end
 function CTM:GROUP_ROSTER_UPDATE(...)
 	self.numGroupMembers = IsInRaid() and GetNumGroupMembers() or GetNumSubgroupMembers()
 
-	-- CheckVersionOLD(self, ...)
 	CheckStatus()
 end
 
@@ -651,8 +682,6 @@ function CTM:UNIT_THREAT_LIST_UPDATE(...)
 end
 
 function CTM:PLAYER_LOGIN()
-	-- C_ChatInfo.RegisterAddonMessagePrefix("CTMVer")
-
 	CTM_Options = CTM_Options or {}
 	C = CopyDefaults(self.defaultConfig, CTM_Options)
 
@@ -663,7 +692,13 @@ function CTM:PLAYER_LOGIN()
 
 	-- Adjust C.bar.count if it exceed the frame height
 	local maxBarCount = floor(C.frame.height / (C.bar.height + C.bar.padding - 1))
-	if C.bar.count > maxBarCount then C.bar.count = maxBarCount end
+	if C.frame.verticalOrientation then
+		maxBarCount = floor(C.frame.width / (C.bar.height + C.bar.padding - 1))
+	end
+
+	if C.bar.count > maxBarCount then 
+		C.bar.count = maxBarCount 
+	end
 
 	-- Adjust fonts for CJK
 	if self.locale == "koKR" or self.locale == "zhCN" or self.locale == "zhTW" then
@@ -676,7 +711,7 @@ function CTM:PLAYER_LOGIN()
 
 	-- Get Colors
 	CTM.colorFallback = {0.8, 0, 0.8, C.bar.alpha}
-	CTM.colorMarker = {0.8, 0, 0, C.bar.alpha}
+	CTM.colorMarker = {r=1, g=0.2, b=0.2, alpha=1}--{ C.bar.playerColor[0], C.bar.playerColor[1], C.bar.playerColor[2], C.bar.playerColor[3] } 
 
 	CTM.threatColors = {
 		[0] = C.general.threatColors.good,
@@ -789,7 +824,7 @@ function CTM:SetupMenu()
 			CheckVersion(true)
 		end},
 		{text = L.gui_config, notCheckable = true, func = function()
-			LibStub("AceConfigDialog-3.0"):Open("ClassicThreatMeter")
+			LibStub("AceConfigDialog-3.0"):Open("Looch-ClassicThreatMeter")
 		end},
 	}
 end
@@ -832,22 +867,6 @@ CTM.configTable = {
 					type = "toggle",
 					width = "full",
 				},
-				--[[
-				minimap = {
-					order = 3,
-					name = L.general_test,
-					type = "toggle",
-					width = "full",
-				},
-				--]]
-				--[[
-				ignorePets = {
-					order = 4,
-					name = L.general_ignorePets,
-					type = "toggle",
-					width = "full",
-				},
-				--]]
 				visibility = {
 					order = 5,
 					name = L.visibility,
@@ -947,7 +966,11 @@ CTM.configTable = {
 			end,
 			set = function(info, value)
 				C[info[2]][info[3]] = value
-				C.frame.height = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+				if C.frame.verticalOrientation then
+					C.frame.width = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+				else
+					C.frame.height = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+				end
 				CTM:UpdateFrame()
 			end,
 			args = {
@@ -1045,6 +1068,11 @@ CTM.configTable = {
 								},
 							},
 						},
+						verticalOrientation = {
+							order = 7,
+							name = L.vertical_orientation,
+							type = "toggle"
+						},
 					},
 				},
 				bar = {
@@ -1068,7 +1096,13 @@ CTM.configTable = {
 										CTM.bars[i]:Hide()
 									end
 								end
-								C.frame.height = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+
+								if C.frame.verticalOrientation then
+									C.frame.width  = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+								else
+									C.frame.height = ((C.bar.height + C.bar.padding - 1) * C.bar.count) - C.bar.padding
+								end
+								
 								CTM:UpdateFrame()
 							end,
 						},
@@ -1089,6 +1123,45 @@ CTM.configTable = {
 							max = 16,
 							step = 1,
 						},
+						marker = {
+							order = 5,
+							name = L.bar_marker,
+							type = "group",
+							args = {
+								playerMarker = {
+									order = 1,
+									name = L.bar_usemarker,
+									type = "toggle",
+								},
+								color = {
+									order = 2,
+									name = L.bar_markerColor,
+									type = "color",
+									hasAlpha = true,
+								},
+							},
+						},
+						hideName = {
+							order = 6,
+							name = L.hide_name,
+							type = "toggle"
+						},
+						hidePercent = {
+							order = 7,
+							name = L.hide_percent,
+							type = "toggle"
+						},
+						hideValue = {
+							order = 8,
+							name = L.hide_value,
+							type = "toggle"
+						},
+						monocolor = {
+							order = 9,
+							name = L.bar_monocolor,
+							type = "toggle"
+						},
+						
 						-- marker
 						-- texture
 						-- custom color / class color
@@ -1142,49 +1215,6 @@ CTM.configTable = {
 				},
 			},
 		},
-		--[[
-		warnings = {
-			order = 3,
-			type = "group",
-			name = L.warnings,
-			args = {
-				visual = {
-					order = 1,
-					name = L.warnings_visual,
-					type = "toggle",
-					width = "full",
-				},
-				sounds = {
-					order = 2,
-					name = L.warnings_sounds,
-					type = "toggle",
-					width = "full",
-				},
-				threshold = {
-					order = 3,
-					name = L.warnings_threshold,
-					type = "range",
-					min = 50,
-					max = 100,
-					step = 1,
-					bigStep = 10,
-					-- get / set
-				},
-				warningFile = {
-					order = 4,
-					name = L.sound_warningFile,
-					type = "toggle",
-					width = "full",
-				},
-				pulledFile = {
-					order = 5,
-					name = L.sound_pulledFile,
-					type = "toggle",
-					width = "full",
-				},
-			},
-		},
-		--]]
 		version = {
 			order = 4,
 			type = "group",
@@ -1228,5 +1258,5 @@ SLASH_CLASSICTHREATMETER1 = "/ctm"
 SLASH_CLASSICTHREATMETER2 = "/threat"
 SLASH_CLASSICTHREATMETER3 = "/classicthreatmeter"
 SlashCmdList["CLASSICTHREATMETER"] = function()
-	LibStub("AceConfigDialog-3.0"):Open("ClassicThreatMeter")
+	LibStub("AceConfigDialog-3.0"):Open("Looch-ClassicThreatMeter")
 end

@@ -3,8 +3,8 @@ local CTM, C, L, _ = unpack(select(2, ...))
 -----------------------------
 -- Default Config
 -----------------------------
-local defaultTexture	= [[Interface\ChatFrame\ChatFrameBackground]]
-local defaultFont		= [[Interface\AddOns\ClassicThreatMeter\media\NotoSans-SemiCondensedBold.ttf]] or _G.STANDARD_TEXT_FONT
+local defaultTexture	= [[Interface\PaperDollInfoFrame\UI-Character-Skills-Bar]]
+local defaultFont		= [[Interface\AddOns\Looch-ClassicThreatMeter\media\NotoSans-SemiCondensedBold.ttf]] or _G.STANDARD_TEXT_FONT
 
 CTM.defaultConfig = {}
 
@@ -22,7 +22,7 @@ CTM.defaultConfig.general = {
 	threatColors		= {										-- colors for nameplateThreat
 							good	= {0.2, 0.8, 0.2},
 							neutral	= {1, 1, 0},
-							bad		= {1, 0, 0},
+							bad		= {1, 0, 0}
 						}
 }
 
@@ -38,14 +38,15 @@ CTM.defaultConfig.frame = {
 	color				= {0, 0, 0, 0.35},						-- frame background color
 	headerShow			= true,									-- show frame header
 	headerColor			= {0, 0, 0, 0.8},						-- frame header color
+	verticalOrientation	= true
 }
 
 -- backdrop settings
 CTM.defaultConfig.backdrop = {
 	bgFile				= defaultTexture,						-- backdrop file location
-	bgColor				= {1, 1, 1, 0.1},						-- backdrop color
+	bgColor				= {0,0,0,0},							-- backdrop color
 	edgeFile			= defaultTexture,						-- backdrop edge file location
-	edgeColor			= {0, 0, 0, 1},							-- backdrop edge color
+	edgeColor			= {0, 0, 0, 0},							-- backdrop edge colo
 	tile				= false,								-- backdrop texture tiling
 	tileSize			= 0,									-- backdrop tile size
 	edgeSize			= 1,									-- backdrop edge size
@@ -58,12 +59,16 @@ CTM.defaultConfig.bar = {
 	descend				= true,									-- sort bars descending / ascending
 	height				= 18,									-- bar height
 	padding				= 1,									-- padding between bars
-	marker				= false,								-- mark your statusbar in red
 	texture				= defaultTexture,						-- texture file location
 	classColor			= true,									-- use class color
-	defaultColor		= {0.8, 0, 0.8, 1},						-- color to use when classColor is false
+	defaultColor		= {1.0, 1.0, 1.0, 1},					-- color to use when classColor is false
 	alpha				= 1,									-- statusbar alpha
-	colorMod			= 0,									-- color modifier
+	playerMarker		= true,								-- mark your statusbar in red
+	playerColor			= {1, 0.2, 0.2, 1},
+	colorMod			= 1,									-- color modifier
+	hideName			= false,
+	hideValue			= false,
+	hidePercent			= false
 }
 
 -- font settings
